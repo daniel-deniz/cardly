@@ -1,43 +1,64 @@
 # Draft – av-cards
 
 Draft es un agente de IA orientado a equipos de producto y tecnología.
-Su objetivo es transformar inputs poco estructurados en tarjetas claras y accionables
-(Funcionalidad o Bug) siguiendo reglas estrictas.
+Su objetivo es transformar información poco estructurada en tarjetas claras,
+accionables y listas para usar en contextos reales (backlog, QA, comunicación interna).
 
-## Qué hace hoy
-- Detecta intención del usuario (tarjeta vs small talk)
-- Genera tarjetas con formato estándar:
+Este repositorio contiene el núcleo lógico del agente Draft.
+
+---
+
+## Qué es Draft
+
+Draft no es un chatbot genérico.
+Es un agente con reglas de producto claras, diseñado para:
+
+- reducir ambigüedad en requisitos
+- mejorar la calidad de las tarjetas de trabajo
+- ahorrar tiempo en la redacción y revisión de tickets
+
+Draft prioriza claridad, consistencia y utilidad real.
+No inventa información ni rellena contenido sin valor.
+
+---
+
+## Qué hace actualmente
+
+Draft funciona como un agente conversacional por estados que:
+
+- Detecta la intención del usuario:
+  - solicitud de tarjeta (Funcionalidad o Bug)
+  - small talk u otros mensajes no relevantes
+- Genera tarjetas estructuradas con formato estándar:
   - Título
   - Descripción
   - Requisitos
   - Validación
-- Aplica reglas para evitar invención y mantener claridad
+- Aplica reglas de producto, entre ellas:
+  - evitar invención de datos
+  - limitar contenido innecesario
+  - convertir información incompleta en requisitos neutrales
+  - mantener consistencia entre tarjetas
 
-## Qué no hace aún
-- No envía emails
-- No gestiona versiones
+El resultado es contenido listo para copiar y pegar en herramientas de trabajo.
+
+---
+
+## Qué no hace todavía
+
+- No envía emails ni comunicaciones automáticas
+- No gestiona versiones ni releases
 - No tiene interfaz gráfica
-- No persiste datos
+- No persiste información
+- No se integra con herramientas externas
+
+---
 
 ## Estructura del proyecto
-- `src/llm.py`: conexión con el modelo de IA
-- `src/state.py`: estado de la conversación
-- `src/nodes.py`: lógica de negocio de Draft (reglas y generación)
-- `src/graph.py`: flujo del agente (orquestación)
 
-## Requisitos
-- Python 3.10+ (recomendado)
-- Dependencias en `requirements.txt`
-
-## Cómo ejecutarlo en local (básico)
-1. Clonar el repositorio
-2. Crear y activar un entorno virtual
-3. Instalar dependencias
-4. Ejecutar el script principal (según configuración local)
-
-> Nota: este repositorio está en fase inicial y el modo de ejecución puede cambiar.
-
-## Roadmap inmediato
-- Mejorar README con ejemplo de input/output
-- Añadir pruebas básicas de validación
-- Diseñar flujo de email de release por versión (2.3)
+```text
+src/
+├── llm.py      # Conexión y configuración del modelo de IA
+├── state.py    # Estado de la conversación
+├── nodes.py    # Lógica de negocio de Draft
+└── graph.py    # Flujo del agente
