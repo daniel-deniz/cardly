@@ -1,5 +1,43 @@
+import json
 import streamlit as st
 from agent.graph import build_graph
+
+# 2.3 Release Email
+from release_email import generate_release_email
+
+# --- LLM (opcional) para limpiar descripciones del release email ---
+# Si no hay SDK / API key, no rompe: simplemente no se usa el LLM.
+try:
+    from openai import OpenAI  # type: ignore
+    _openai_client = OpenAI()
+except Exception:
+    _openai_client = None
+
+
+def llm_rewriter(prompt: str) -> str:
+    """
+    Rewriter para release_email.py.
+    Si no hay cliente, devuelve string vacío (release_email hará fallback al texto original).
+    """
+    if _openai_client is None:
+        return ""
+
+    resp = _openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Eres un asistente que reescribe texto para un email de release a cliente. "
+                    "Cumple estrictamente las instrucciones del prompt del usuario."
+                ),
+            },
+            {"role": "user", "content": prompt.strip()},
+        ],
+        temperature=0.0,
+    )
+    return resp.choices[0].message.content or ""
+
 
 st.set_page_config(page_title="Draft", page_icon="🧰", layout="centered")
 
@@ -11,7 +49,6 @@ st.markdown(
       footer { visibility: hidden; }
       header { visibility: hidden; }
 
-      /* Toolbar estilo "ChatGPT icons": pequeños, juntos, tipo chip */
       div.stButton > button {
         padding: 0.10rem 0.35rem !important;
         font-size: 0.95rem !important;
@@ -29,21 +66,20 @@ st.markdown(
 )
 
 st.title("Draft")
-st.caption("Agente para redactar tarjetas de funcionalidad y bugs.")
+st.caption("Tu agente de confianza.")
+
 
 @st.cache_resource
 def get_agent_app():
     return build_graph()
+
 
 agent_app = get_agent_app()
 
 # Estado conversación
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "Hola, soy **Draft**. Cuéntame qué necesitas (funcionalidad o bug) y te devuelvo la tarjeta lista.",
-        }
+        {"role": "assistant", "content": "Hola, soy **Draft**. Cuéntame qué necesitas."}
     ]
 
 # Estado de trabajo (tarjeta actual)
@@ -56,6 +92,12 @@ st.session_state.setdefault("last_output_mode", None)
 st.session_state.setdefault("copied_flag", False)
 st.session_state.setdefault("show_add_req", False)
 st.session_state.setdefault("show_remove_req", False)
+
+# 2.3 estado release email
+st.session_state.setdefault("release_email_subject", "")
+st.session_state.setdefault("release_email_body", "")
+st.session_state.setdefault("release_email_warnings", [])
+st.session_state.setdefault("release_cards", None)  # <- persistimos las cards parseadas
 
 # Iconos
 ICON_COPY = "⧉"
@@ -127,9 +169,36 @@ def apply_instruction(instruction: str):
     if output_mode:
         st.session_state.last_output_mode = output_mode
 
-    # Log en chat (transparencia)
     st.session_state.messages.append({"role": "user", "content": instruction})
     st.session_state.messages.append({"role": "assistant", "content": "Aquí tienes la tarjeta:\n\n" + card})
+
+
+def parse_cards_from_json_bytes(file_bytes: bytes):
+    raw = file_bytes.decode("utf-8-sig")  # soporta BOM
+    parsed = json.loads(raw, strict=False)  # tolera control chars no escapados
+
+    # Aceptar formato lista [] o {"tasks":[...]}
+    if isinstance(parsed, dict) and "tasks" in parsed and isinstance(parsed["tasks"], list):
+        cards = parsed["tasks"]
+    elif isinstance(parsed, list):
+        cards = parsed
+    else:
+        raise ValueError("Formato JSON no soportado. Debe ser una lista [] o un objeto con clave 'tasks'.")
+
+    if not cards:
+        raise ValueError("El archivo no contiene tarjetas.")
+
+    # Validación mínima
+    for i, c in enumerate(cards):
+        if not isinstance(c, dict):
+            raise ValueError(f"Tarjeta #{i+1} no es un objeto JSON.")
+        if not (c.get("title") or "").strip():
+            raise ValueError(f"Tarjeta #{i+1} no tiene 'title'.")
+
+        c["title"] = (c.get("title") or "").strip()
+        c["description"] = (c.get("description") or "").strip()
+
+    return cards
 
 
 # Render del chat
@@ -138,16 +207,13 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-# Input principal
 user_input = st.chat_input("Escribe lo que necesitas…")
 
 if user_input:
-    # Mensaje del usuario
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="🐵"):
         st.markdown(user_input)
 
-    # Small talk detection (NO genera tarjeta)
     if is_small_talk(user_input):
         reply = (
             "Perfecto. Si quieres crear una tarjeta, dime la necesidad o el bug "
@@ -158,7 +224,6 @@ if user_input:
             st.markdown(reply)
         st.stop()
 
-    # Ejecución normal del agente
     with st.chat_message("assistant", avatar="🧰"):
         with st.spinner("Draft está trabajando…"):
             try:
@@ -182,7 +247,8 @@ if user_input:
         {"role": "assistant", "content": "Aquí tienes la tarjeta:\n\n" + (st.session_state.last_card or "")}
     )
 
-# Toolbar compacta
+
+# Toolbar compacta (tarjetas)
 if st.session_state.last_card:
     st.divider()
 
@@ -217,7 +283,6 @@ if st.session_state.last_card:
         st.text_area("Tarjeta", st.session_state.last_card, height=200)
         st.session_state.copied_flag = False
 
-    # UI: añadir requisito
     if st.session_state.show_add_req:
         st.markdown("**Añadir requisito**")
         req = st.text_input(
@@ -237,7 +302,6 @@ if st.session_state.last_card:
                 st.session_state.show_add_req = False
                 st.rerun()
 
-    # UI: quitar requisito
     if st.session_state.show_remove_req:
         st.markdown("**Quitar requisito**")
         hint = st.text_input(
@@ -260,7 +324,8 @@ if st.session_state.last_card:
                 st.session_state.show_remove_req = False
                 st.rerun()
 
-# Sidebar mínimo
+
+# Sidebar
 with st.sidebar:
     st.markdown("### Controles")
     if st.button("Limpiar chat"):
@@ -277,4 +342,74 @@ with st.sidebar:
         st.session_state.copied_flag = False
         st.session_state.show_add_req = False
         st.session_state.show_remove_req = False
+
+        # También limpiamos el estado del release email (sin botón extra)
+        st.session_state.release_email_subject = ""
+        st.session_state.release_email_body = ""
+        st.session_state.release_email_warnings = []
+        st.session_state.release_cards = None
+
+        st.rerun()
+
+    st.divider()
+    st.markdown("### Release email")
+
+    version_input = st.text_input(
+        "Versión",
+        value="v1.0.0",
+        placeholder="Ej: v1.8.0",
+        key="release_version_input",
+    )
+
+    uploaded = st.file_uploader(
+        "Tarjetas (JSON)",
+        type=["json"],
+        accept_multiple_files=False,
+        key="release_cards_file",
+        help="Sube un archivo .json con una lista de tarjetas (array) o un objeto con clave 'tasks'.",
+    )
+
+    # Persistir cards al subir archivo (para que no se pierdan en rerun)
+    if uploaded is not None:
+        try:
+            st.session_state.release_cards = parse_cards_from_json_bytes(uploaded.getvalue())
+        except Exception as e:
+            st.session_state.release_cards = None
+            st.error(str(e))
+
+    if st.button("Generar"):
+        if not st.session_state.release_cards:
+            st.error("Sube un archivo JSON válido con tarjetas antes de generar.")
+            st.stop()
+
+        version_name = (version_input or "").strip() or "sin versión"
+
+        r = generate_release_email(
+            version_name,
+            st.session_state.release_cards,
+            product_name="Draft",
+            max_news=8,
+            max_fixes=6,
+            llm_rewriter=llm_rewriter if _openai_client is not None else None,
+        )
+
+        st.session_state.release_email_subject = r.subject
+        st.session_state.release_email_body = r.body
+        st.session_state.release_email_warnings = r.warnings or []
+
+        # Publicar el resultado directamente en el chat (sin text_area)
+        msg_lines = []
+        msg_lines.append("Aquí tienes el **Release email**:")
+        msg_lines.append("")
+        msg_lines.append(f"**Asunto:** {r.subject}")
+        msg_lines.append("")
+        msg_lines.append(r.body.strip())
+
+        if r.warnings:
+            msg_lines.append("")
+            msg_lines.append("**Avisos (revisión interna):**")
+            for w in r.warnings:
+                msg_lines.append(f"- {w}")
+
+        st.session_state.messages.append({"role": "assistant", "content": "\n".join(msg_lines)})
         st.rerun()
