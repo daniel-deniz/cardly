@@ -4,9 +4,9 @@ Cardly es un asistente de IA para equipos de producto y tecnología: convierte u
 petición en lenguaje natural en una tarjeta de **funcionalidad** o **bug** lista para
 copiar/pegar en un kanban, con un formato consistente para todo el equipo.
 
-Sucesor de [av-cards](https://github.com/daniel-deniz/cardly) ("Draft"), reconstruido
-como app web con cuentas por usuario e historial de conversaciones guardado. La parte
-de generación de emails de release de la versión anterior no se ha portado.
+Sucesor de av-cards ("Draft"), reconstruido como app web con cuentas por usuario e
+historial de conversaciones guardado. La parte de generación de emails de release de
+la versión anterior no se ha portado.
 
 ## Stack
 
