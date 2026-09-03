@@ -1,10 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { ArrowUp } from "lucide-react";
+import { CardlyAvatar } from "@/components/CardlyAvatar";
 import { CopyButton } from "@/components/CopyButton";
+import { TypingIndicator } from "@/components/TypingIndicator";
+
+const SUGERENCIAS = [
+  "El buscador de clientes tarda más de 10 segundos y bloquea la pantalla",
+  "Queremos exportar el listado de facturas a Excel, solo para administradores",
+  "Al guardar un pedido sin dirección no avisa y se pierde lo escrito",
+];
 
 function textFromMessage(message: UIMessage): string {
   return message.parts
@@ -28,6 +37,9 @@ export function Chat({
   // estado `error` (ese solo cubre fallos de transporte), así que los guardamos aquí.
   const [chatError, setChatError] = useState<string | null>(null);
   const failedRef = useRef(false);
+  const hiloRef = useRef<HTMLDivElement>(null);
+  // Si el usuario sube a releer algo, dejamos de arrastrarle al fondo.
+  const pegadoAlFondoRef = useRef(true);
   // La página de conversación nueva genera un id por render; se congela aquí para que
   // un router.refresh() no cambie el id del chat a media conversación.
   const [chatId] = useState(conversationId);
@@ -51,85 +63,154 @@ export function Chat({
     },
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!input.trim()) return;
+  const isBusy = status === "submitted" || status === "streaming";
+
+  // Las tarjetas son largas: sin esto el final de la respuesta se queda fuera de vista.
+  // Se ancla de golpe (no "smooth") porque durante el streaming cada chunk vuelve a
+  // dispararlo y las animaciones encadenadas se pisan y no llegan al fondo.
+  useEffect(() => {
+    const contenedor = hiloRef.current;
+    if (!contenedor || !pegadoAlFondoRef.current) return;
+    contenedor.scrollTop = contenedor.scrollHeight;
+  }, [messages, isBusy]);
+
+  const alHacerScroll = () => {
+    const contenedor = hiloRef.current;
+    if (!contenedor) return;
+    const distanciaAlFondo = contenedor.scrollHeight - contenedor.scrollTop - contenedor.clientHeight;
+    pegadoAlFondoRef.current = distanciaAlFondo < 120;
+  };
+
+  const enviar = (texto: string) => {
+    const limpio = texto.trim();
+    if (!limpio || isBusy) return;
     setChatError(null);
     failedRef.current = false;
-    sendMessage({ text: input });
+    sendMessage({ text: limpio });
     setInput("");
   };
 
-  const isBusy = status === "submitted" || status === "streaming";
+  const sinMensajes = messages.length === 0;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-2xl space-y-4">
-          {messages.length === 0 && (
-            <p className="text-sm text-neutral-500">
-              Describe la funcionalidad o el bug que necesitas convertir en tarjeta.
-            </p>
-          )}
-          {messages.map((message, index) => {
-            const text = textFromMessage(message);
-            const isUser = message.role === "user";
-            // Mientras se genera, la última tarjeta está a medias: copiarla daría un
-            // texto incompleto, así que el botón aparece al terminar.
-            const generandose = isBusy && index === messages.length - 1;
+    <div className="flex h-full flex-col bg-background">
+      <header className="flex items-center gap-3 border-b border-border-subtle px-6 py-3">
+        <CardlyAvatar size={36} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-tight">Cardly</p>
+          <p className="truncate text-xs text-neutral-500">
+            {isBusy ? "Escribiendo…" : "Tu asistente de tarjetas de producto"}
+          </p>
+        </div>
+      </header>
 
-            return (
-              <div key={message.id} className={isUser ? "ml-auto max-w-[80%]" : "mr-auto max-w-[80%]"}>
-                <div
-                  className={`whitespace-pre-wrap rounded-lg px-4 py-3 text-sm ${
-                    isUser
-                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                      : "bg-neutral-100 dark:bg-neutral-900"
-                  }`}
-                >
-                  {text}
-                </div>
-
-                {!isUser && text && !generandose && (
-                  <div className="mt-1 flex justify-end">
-                    <CopyButton text={text} />
-                  </div>
-                )}
+      <div ref={hiloRef} onScroll={alHacerScroll} className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto max-w-2xl">
+          {sinMensajes ? (
+            <div className="flex flex-col items-center gap-4 pt-10 text-center">
+              <CardlyAvatar size={72} />
+              <div>
+                <p className="text-base font-semibold">¿Qué convertimos en tarjeta?</p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Cuéntame la funcionalidad o el bug con tus palabras. Yo le doy el formato.
+                </p>
               </div>
-            );
-          })}
+              <div className="mt-2 flex w-full flex-col gap-2">
+                {SUGERENCIAS.map((sugerencia) => (
+                  <button
+                    key={sugerencia}
+                    type="button"
+                    onClick={() => enviar(sugerencia)}
+                    className="rounded-xl border border-border-subtle bg-surface px-4 py-3 text-left text-sm text-neutral-600 transition-colors hover:border-brand-400 hover:text-foreground dark:text-neutral-300"
+                  >
+                    {sugerencia}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {messages.map((message, index) => {
+                const text = textFromMessage(message);
+                const isUser = message.role === "user";
+                // Mientras se genera, la última tarjeta está a medias: copiarla daría un
+                // texto incompleto, así que el botón aparece al terminar.
+                const generandose = isBusy && index === messages.length - 1;
 
-          {chatError && (
-            <p
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-            >
-              {chatError}
-            </p>
+                if (isUser) {
+                  return (
+                    <div key={message.id} className="cardly-aparece flex justify-end">
+                      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-500 px-4 py-2.5 text-sm text-white">
+                        {text}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={message.id} className="cardly-aparece flex gap-3">
+                    <CardlyAvatar />
+                    <div className="min-w-0 flex-1">
+                      <div className="w-fit max-w-full whitespace-pre-wrap rounded-2xl rounded-tl-md border border-border-subtle bg-surface px-4 py-3 text-sm">
+                        {/* Mientras no ha llegado texto, los puntos evitan una burbuja vacía. */}
+                        {text || <TypingIndicator />}
+                      </div>
+                      {text && !generandose && (
+                        <div className="mt-1">
+                          <CopyButton text={text} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {status === "submitted" && (
+                <div className="flex gap-3">
+                  <CardlyAvatar />
+                  <div className="w-fit rounded-2xl rounded-tl-md border border-border-subtle bg-surface px-4 py-3">
+                    <TypingIndicator />
+                  </div>
+                </div>
+              )}
+
+              {chatError && (
+                <p
+                  role="alert"
+                  className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300"
+                >
+                  {chatError}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="border-t border-neutral-200 p-4 dark:border-neutral-800"
-      >
-        <div className="mx-auto flex max-w-2xl gap-2">
+      <div className="px-6 pb-6">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            enviar(input);
+          }}
+          className="mx-auto flex max-w-2xl items-center gap-2 rounded-full border border-border-subtle bg-surface-strong py-2 pl-5 pr-2 focus-within:border-brand-400"
+        >
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Ej: necesitamos que el filtro de facturas recuerde la última fecha usada"
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            placeholder="Describe la funcionalidad o el bug…"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-500"
           />
           <button
             type="submit"
-            disabled={isBusy}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            disabled={isBusy || !input.trim()}
+            aria-label="Enviar"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isBusy ? "Generando…" : "Enviar"}
+            <ArrowUp className="size-4" />
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
