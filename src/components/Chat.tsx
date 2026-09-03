@@ -7,6 +7,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { ArrowUp } from "lucide-react";
 import { CardlyAvatar } from "@/components/CardlyAvatar";
 import { CopyButton } from "@/components/CopyButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { TypingIndicator } from "@/components/TypingIndicator";
 
 const SUGERENCIAS = [
@@ -96,12 +97,13 @@ export function Chat({
     <div className="flex h-full flex-col bg-background">
       <header className="flex items-center gap-3 border-b border-border-subtle px-6 py-3">
         <CardlyAvatar size={36} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-tight">Cardly</p>
           <p className="truncate text-xs text-neutral-500">
             {isBusy ? "Escribiendo…" : "Tu asistente de tarjetas de producto"}
           </p>
         </div>
+        <ThemeToggle />
       </header>
 
       <div ref={hiloRef} onScroll={alHacerScroll} className="flex-1 overflow-y-auto px-6 py-6">

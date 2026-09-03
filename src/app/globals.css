@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
+/* El tema lo elige cada usuario, no el sistema operativo: las utilidades dark:
+   pasan a depender de la clase .dark que ponemos en <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
   /* Superficies del chat */
@@ -28,14 +33,13 @@
   --color-brand-700: #bc4508;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0b0c;
-    --foreground: #ededed;
-    --surface: #161618;
-    --surface-strong: #1e1e21;
-    --border-subtle: #2a2a2e;
-  }
+.dark {
+  color-scheme: dark;
+  --background: #0b0b0c;
+  --foreground: #ededed;
+  --surface: #161618;
+  --surface-strong: #1e1e21;
+  --border-subtle: #2a2a2e;
 }
 
 body {
