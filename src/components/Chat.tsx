@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { CopyButton } from "@/components/CopyButton";
 
 function textFromMessage(message: UIMessage): string {
   return message.parts
@@ -70,18 +71,33 @@ export function Chat({
               Describe la funcionalidad o el bug que necesitas convertir en tarjeta.
             </p>
           )}
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`whitespace-pre-wrap rounded-lg px-4 py-3 text-sm ${
-                message.role === "user"
-                  ? "ml-auto max-w-[80%] bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  : "mr-auto max-w-[80%] bg-neutral-100 dark:bg-neutral-900"
-              }`}
-            >
-              {textFromMessage(message)}
-            </div>
-          ))}
+          {messages.map((message, index) => {
+            const text = textFromMessage(message);
+            const isUser = message.role === "user";
+            // Mientras se genera, la última tarjeta está a medias: copiarla daría un
+            // texto incompleto, así que el botón aparece al terminar.
+            const generandose = isBusy && index === messages.length - 1;
+
+            return (
+              <div key={message.id} className={isUser ? "ml-auto max-w-[80%]" : "mr-auto max-w-[80%]"}>
+                <div
+                  className={`whitespace-pre-wrap rounded-lg px-4 py-3 text-sm ${
+                    isUser
+                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                      : "bg-neutral-100 dark:bg-neutral-900"
+                  }`}
+                >
+                  {text}
+                </div>
+
+                {!isUser && text && !generandose && (
+                  <div className="mt-1 flex justify-end">
+                    <CopyButton text={text} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {chatError && (
             <p
