@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ConversationSummary } from "@/lib/conversations";
+import { ConversationItem } from "@/components/ConversationItem";
 import { signOut } from "@/app/login/actions";
 
 export function Sidebar({
@@ -12,8 +12,6 @@ export function Sidebar({
   conversations: ConversationSummary[];
   userEmail: string;
 }) {
-  const pathname = usePathname();
-
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="p-3">
@@ -27,17 +25,7 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2">
         {conversations.map((conversation) => (
-          <Link
-            key={conversation.id}
-            href={`/c/${conversation.id}`}
-            className={`block truncate rounded-md px-3 py-2 text-sm ${
-              pathname === `/c/${conversation.id}`
-                ? "bg-neutral-200 dark:bg-neutral-800"
-                : "hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60"
-            }`}
-          >
-            {conversation.title}
-          </Link>
+          <ConversationItem key={conversation.id} conversation={conversation} />
         ))}
         {conversations.length === 0 && (
           <p className="px-3 py-2 text-sm text-neutral-500">Aún no hay conversaciones.</p>

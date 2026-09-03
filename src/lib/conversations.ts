@@ -19,6 +19,25 @@ export async function listConversations(): Promise<ConversationSummary[]> {
   return data ?? [];
 }
 
+/**
+ * Devuelve la conversación si existe y es del usuario; null en caso contrario.
+ * RLS hace que la de otro usuario sea indistinguible de una inexistente, que es
+ * justo lo que queremos para responder 404 sin revelar si el id existe.
+ */
+export async function getConversation(id: string): Promise<ConversationSummary | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, title, updated_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  // 22P02: el id de la URL no es un uuid válido (p. ej. /c/loquesea).
+  if (error?.code === "22P02") return null;
+  if (error) dbError(error);
+  return data;
+}
+
 export async function loadConversationMessages(conversationId: string): Promise<UIMessage[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
