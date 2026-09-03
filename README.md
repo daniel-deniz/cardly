@@ -10,7 +10,7 @@ copiar/pegar en un kanban, con un formato consistente para todo el equipo.
 - [Vercel AI SDK](https://ai-sdk.dev) (`useChat`, `streamText`) para el chat con streaming.
 - [Supabase](https://supabase.com): Auth (alta de usuarios manual, sin registro público)
   + Postgres para conversaciones e historial, con RLS por usuario.
-- OpenAI (`gpt-4o-mini`) para la generación de tarjetas.
+- OpenAI (`gpt-5.5` por defecto, configurable con `OPENAI_MODEL`) para la generación de tarjetas.
 
 ## Desarrollo local
 

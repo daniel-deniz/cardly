@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
@@ -23,13 +23,29 @@ export function Chat({
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
+  // El SDK entrega los errores que llegan dentro del stream por callback, no en su
+  // estado `error` (ese solo cubre fallos de transporte), así que los guardamos aquí.
+  const [chatError, setChatError] = useState<string | null>(null);
+  const failedRef = useRef(false);
+  // La página de conversación nueva genera un id por render; se congela aquí para que
+  // un router.refresh() no cambie el id del chat a media conversación.
+  const [chatId] = useState(conversationId);
 
   const { messages, sendMessage, status } = useChat({
-    id: conversationId,
+    id: chatId,
     messages: initialMessages,
     transport: new DefaultChatTransport({ api: "/api/chat" }),
+    onError: (error) => {
+      console.error("[Cardly] error en el chat", error);
+      failedRef.current = true;
+      setChatError(error.message);
+    },
     onFinish: () => {
-      if (isNew) router.push(`/c/${conversationId}`);
+      // Si ha fallado no tocamos la ruta: el refresh remontaría el componente y
+      // borraría el mensaje de error que acabamos de enseñar.
+      if (failedRef.current) return;
+      // replaceState en vez de router.push para no remontar el chat a mitad de uso.
+      if (isNew) window.history.replaceState({}, "", `/c/${chatId}`);
       router.refresh();
     },
   });
@@ -37,6 +53,8 @@ export function Chat({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!input.trim()) return;
+    setChatError(null);
+    failedRef.current = false;
     sendMessage({ text: input });
     setInput("");
   };
@@ -64,6 +82,15 @@ export function Chat({
               {textFromMessage(message)}
             </div>
           ))}
+
+          {chatError && (
+            <p
+              role="alert"
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+            >
+              {chatError}
+            </p>
+          )}
         </div>
       </div>
 

@@ -45,31 +45,46 @@ export async function POST(req: Request) {
   }
 
   if (lastMessage?.role === "user" && lastMessageText) {
-    await supabase
+    const { error } = await supabase
       .from("messages")
       .insert({ conversation_id: id, role: "user", content: lastMessageText });
+    if (error) {
+      console.error("[Cardly] no se pudo guardar el mensaje del usuario", error);
+    }
   }
 
   const result = streamText({
-    model: openai("gpt-4o-mini"),
+    model: openai(process.env.OPENAI_MODEL ?? "gpt-5.5"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
   });
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
+    onError: (streamError) => {
+      // Sin esto el fallo viaja como un stream vacío con HTTP 200 y el usuario no ve nada.
+      console.error("[Cardly] error generando la tarjeta", streamError);
+      return "No se ha podido generar la tarjeta. Revisa la configuración de OpenAI e inténtalo de nuevo.";
+    },
     onFinish: async ({ responseMessage }) => {
       const text = textFromMessage(responseMessage);
       if (!text) return;
 
-      await supabase
+      const { error: insertError } = await supabase
         .from("messages")
         .insert({ conversation_id: id, role: "assistant", content: text });
+      if (insertError) {
+        console.error("[Cardly] no se pudo guardar la respuesta", insertError);
+        return;
+      }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("conversations")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", id);
+      if (updateError) {
+        console.error("[Cardly] no se pudo actualizar la conversación", updateError);
+      }
     },
   });
 }
